@@ -68,9 +68,15 @@ function getTargetX(node: SimNode, buckets: string[], width: number, granularity
   return getColumnX(bucket, buckets, width);
 }
 
-export function initGraph(container: HTMLElement): { update(data: GraphResponse, granularity: string): void } {
+export function initGraph(
+  container: HTMLElement,
+  onNodeSelect: (node: GraphNode | null, related: Array<{ node: GraphNode; edgeType: string; weight: number }>) => void
+): { update(data: GraphResponse, granularity: string): void } {
   const width = container.clientWidth;
   const height = container.clientHeight;
+
+  // Store latest graph data so click handlers can access full node info
+  let currentData: GraphResponse = { nodes: [], edges: [] };
 
   const svg = d3.select(container)
     .append('svg')
@@ -78,23 +84,54 @@ export function initGraph(container: HTMLElement): { update(data: GraphResponse,
     .attr('height', height)
     .style('display', 'block');
 
-  // Background click to reset highlight
-  svg.append('rect')
+  // Background rect — outside mainG so it stays at fixed SVG size when zoomed
+  const bgRect = svg.append('rect')
     .attr('width', width)
     .attr('height', height)
-    .attr('fill', 'transparent')
-    .on('click', resetHighlight);
+    .attr('fill', 'transparent');
 
-  // Layers: column labels, edges, nodes
-  const labelsG = svg.append('g').attr('class', 'labels');
-  const edgesG = svg.append('g').attr('class', 'edges');
-  const nodesG = svg.append('g').attr('class', 'nodes');
+  // Main group that receives the zoom transform
+  const mainG = svg.append('g');
+  const labelsG = mainG.append('g').attr('class', 'labels');
+  const edgesG  = mainG.append('g').attr('class', 'edges');
+  const nodesG  = mainG.append('g').attr('class', 'nodes');
+
+  // Zoom — disable default dblclick-to-zoom; we handle it ourselves
+  const zoom = d3.zoom<SVGSVGElement, unknown>()
+    .scaleExtent([0.15, 5])
+    .filter((event: Event) => event.type !== 'dblclick')
+    .on('zoom', (event) => {
+      mainG.attr('transform', event.transform.toString());
+    });
+  svg.call(zoom);
+
+  bgRect.on('click', () => {
+    resetHighlight();
+    onNodeSelect(null, []);
+  });
+
+  bgRect.on('dblclick', () => {
+    svg.transition().duration(500).call(zoom.transform, d3.zoomIdentity);
+  });
 
   let simulation: d3.Simulation<SimNode, SimLink> | null = null;
 
   function resetHighlight() {
-    edgesG.selectAll<SVGLineElement, SimLink>('line').style('opacity', 0.3);
+    edgesG.selectAll<SVGLineElement, SimLink>('line')
+      .attr('stroke-opacity', d => d.type === 'session-topic' ? 0.5 : 0.4)
+      .attr('stroke-width', d => Math.max(0.5, d.weight * 2));
+
     nodesG.selectAll<SVGGElement, SimNode>('.node').style('opacity', 1);
+
+    nodesG.selectAll<SVGGElement, SimNode>('.node').each(function() {
+      const el = d3.select(this);
+      el.select<SVGCircleElement>('circle')
+        .attr('stroke-opacity', 0.15)
+        .attr('stroke-width', 0.5);
+      el.select<SVGPathElement>('path')
+        .attr('stroke-opacity', 0.15)
+        .attr('stroke-width', 0.5);
+    });
   }
 
   function highlightNode(clickedId: string, links: SimLink[]) {
@@ -107,18 +144,39 @@ export function initGraph(container: HTMLElement): { update(data: GraphResponse,
       if (tid === clickedId) neighborIds.add(sid);
     });
 
-    edgesG.selectAll<SVGLineElement, SimLink>('line').style('opacity', l => {
+    edgesG.selectAll<SVGLineElement, SimLink>('line').each(function(l) {
       const sid = typeof l.source === 'string' ? l.source : l.source.id;
       const tid = typeof l.target === 'string' ? l.target : l.target.id;
-      return (sid === clickedId || tid === clickedId) ? 1 : 0.05;
+      const connected = sid === clickedId || tid === clickedId;
+      d3.select(this)
+        .attr('stroke-opacity', connected ? 1 : 0.03)
+        .attr('stroke-width', connected
+          ? Math.max(0.5, l.weight * 2) + 1
+          : Math.max(0.5, l.weight * 2));
     });
 
-    nodesG.selectAll<SVGGElement, SimNode>('.node').style('opacity', d =>
-      neighborIds.has(d.id) ? 1 : 0.1
-    );
+    nodesG.selectAll<SVGGElement, SimNode>('.node')
+      .style('opacity', d => neighborIds.has(d.id) ? 1 : 0.1);
+
+    // Brighten stroke on the clicked node
+    nodesG.selectAll<SVGGElement, SimNode>('.node')
+      .filter(d => d.id === clickedId)
+      .each(function() {
+        const el = d3.select(this);
+        el.select<SVGCircleElement>('circle')
+          .attr('stroke', '#ffffff')
+          .attr('stroke-opacity', 0.8)
+          .attr('stroke-width', 1.5);
+        el.select<SVGPathElement>('path')
+          .attr('stroke', '#ffffff')
+          .attr('stroke-opacity', 0.8)
+          .attr('stroke-width', 1.5);
+      });
   }
 
   function update(data: GraphResponse, granularity: string) {
+    currentData = data;
+
     const simNodes: SimNode[] = data.nodes.map(toSimNode);
     const simLinks: SimLink[] = data.edges.map(toSimLink);
 
@@ -135,8 +193,10 @@ export function initGraph(container: HTMLElement): { update(data: GraphResponse,
       .attr('x', b => getColumnX(b, buckets, width))
       .attr('y', 18)
       .attr('text-anchor', 'middle')
-      .attr('fill', '#666')
-      .attr('font-size', '11px')
+      .attr('fill', '#555570')
+      .attr('font-size', '10px')
+      .attr('font-family', 'JetBrains Mono, monospace')
+      .attr('letter-spacing', '0.05em')
       .text(b => b);
 
     // Vertical column guide lines
@@ -149,7 +209,8 @@ export function initGraph(container: HTMLElement): { update(data: GraphResponse,
       .attr('x2', b => getColumnX(b, buckets, width))
       .attr('y1', 28)
       .attr('y2', height)
-      .attr('stroke', '#222')
+      .attr('stroke', '#2a2a38')
+      .attr('stroke-dasharray', '3,4')
       .attr('stroke-width', 1);
 
     // Stop old simulation
@@ -162,14 +223,32 @@ export function initGraph(container: HTMLElement): { update(data: GraphResponse,
       .force('charge', d3.forceManyBody<SimNode>().strength(-30))
       .force('link', d3.forceLink<SimNode, SimLink>(simLinks).id(d => d.id).strength(0.1));
 
-    // Edges
+    // Drag behavior for individual node dragging
+    const drag = d3.drag<SVGGElement, SimNode>()
+      .on('start', (event, d) => {
+        if (!event.active) simulation!.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+      })
+      .on('drag', (event, d) => {
+        d.fx = event.x;
+        d.fy = event.y;
+      })
+      .on('end', (event, d) => {
+        if (!event.active) simulation!.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+      });
+
+    // Edges — pointer-events:none so dragging over edges uses SVG zoom/pan
     const edgeSel = edgesG
       .selectAll<SVGLineElement, SimLink>('line')
       .data(simLinks, (_d, i) => String(i))
       .join('line')
-      .attr('stroke', '#888')
-      .attr('stroke-opacity', 0.3)
-      .attr('stroke-width', d => Math.max(0.5, d.weight * 2));
+      .attr('stroke', d => d.type === 'session-topic' ? '#2a4a7a' : '#4a2a7a')
+      .attr('stroke-opacity', d => d.type === 'session-topic' ? 0.5 : 0.4)
+      .attr('stroke-width', d => Math.max(0.5, d.weight * 2))
+      .style('pointer-events', 'none');
 
     // Nodes
     const nodeSel = nodesG
@@ -185,18 +264,44 @@ export function initGraph(container: HTMLElement): { update(data: GraphResponse,
               const area = Math.PI * r * r;
               el.append('path')
                 .attr('d', d3.symbol().type(d3.symbolDiamond).size(area)())
-                .attr('fill', d.color);
+                .attr('fill', d.color)
+                .attr('stroke', '#ffffff')
+                .attr('stroke-width', 0.5)
+                .attr('stroke-opacity', 0.15);
             } else {
               el.append('circle')
                 .attr('r', pixelRadius(d))
-                .attr('fill', d.color);
+                .attr('fill', d.color)
+                .attr('stroke', '#ffffff')
+                .attr('stroke-width', 0.5)
+                .attr('stroke-opacity', 0.15);
             }
             el.append('title').text(d.label);
           });
           g.on('click', function(event: MouseEvent, d: SimNode) {
             event.stopPropagation();
             highlightNode(d.id, simLinks);
+            // Resolve full node data and related nodes from currentData
+            const fullNode = currentData.nodes.find(n => n.id === d.id) ?? null;
+            const related = simLinks
+              .filter(l => {
+                const sid = typeof l.source === 'string' ? l.source : (l.source as SimNode).id;
+                const tid = typeof l.target === 'string' ? l.target : (l.target as SimNode).id;
+                return sid === d.id || tid === d.id;
+              })
+              .map(l => {
+                const sid = typeof l.source === 'string' ? l.source : (l.source as SimNode).id;
+                const tid = typeof l.target === 'string' ? l.target : (l.target as SimNode).id;
+                const neighborId = sid === d.id ? tid : sid;
+                const neighborNode = currentData.nodes.find(n => n.id === neighborId) ?? null;
+                return neighborNode
+                  ? { node: neighborNode, edgeType: l.type, weight: l.weight }
+                  : null;
+              })
+              .filter((x): x is { node: GraphNode; edgeType: 'session-topic' | 'topic-similarity'; weight: number } => x !== null);
+            onNodeSelect(fullNode, related);
           });
+          g.call(drag as d3.DragBehavior<SVGGElement, SimNode, unknown>);
           return g;
         },
         update => {
@@ -205,7 +310,9 @@ export function initGraph(container: HTMLElement): { update(data: GraphResponse,
             if (d.type === 'session') {
               const r = pixelRadius(d);
               const area = Math.PI * r * r;
-              el.select('path').attr('d', d3.symbol().type(d3.symbolDiamond).size(area)()).attr('fill', d.color);
+              el.select('path')
+                .attr('d', d3.symbol().type(d3.symbolDiamond).size(area)())
+                .attr('fill', d.color);
             } else {
               el.select('circle').attr('r', pixelRadius(d)).attr('fill', d.color);
             }

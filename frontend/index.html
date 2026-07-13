@@ -5,32 +5,310 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CC Timeline</title>
   <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: sans-serif; background: #111; color: #eee; display: flex; flex-direction: column; height: 100vh; }
-    #controls {
-      height: 60px;
+    :root {
+      --bg: #0a0a0f;
+      --surface-1: #111118;
+      --surface-2: #1a1a24;
+      --border: #2a2a38;
+      --text-primary: #e8e8f0;
+      --text-secondary: #888899;
+      --accent: #4f9eff;
+      --font-main: system-ui, -apple-system, "Segoe UI", sans-serif;
+      --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-main);
+      background: var(--bg);
+      color: var(--text-primary);
       display: flex;
-      align-items: center;
-      gap: 16px;
-      padding: 0 16px;
-      background: #1a1a1a;
-      border-bottom: 1px solid #333;
-      flex-shrink: 0;
-      flex-wrap: wrap;
+      flex-direction: column;
+      height: 100vh;
       overflow: hidden;
     }
-    #controls label { font-size: 13px; display: flex; align-items: center; gap: 4px; }
-    #controls input[type="date"], #controls input[type="text"] {
-      background: #222; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 2px 6px; font-size: 13px;
+
+    /* ── Controls bar ── */
+    #controls {
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 16px;
+      background: var(--surface-1);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      overflow: hidden;
     }
-    #controls .section { display: flex; align-items: center; gap: 8px; }
-    #controls .section-label { font-size: 12px; color: #888; margin-right: 4px; }
-    #graph { height: calc(100vh - 60px); width: 100%; overflow: hidden; }
+
+    #app-title {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--accent);
+      letter-spacing: 0.1em;
+      margin-right: 4px;
+      white-space: nowrap;
+    }
+
+    .controls-divider {
+      width: 1px;
+      height: 20px;
+      background: var(--border);
+      margin: 0 4px;
+      flex-shrink: 0;
+    }
+
+    #controls .section {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #controls .section-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      white-space: nowrap;
+    }
+
+    #controls label {
+      font-size: 12px;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+
+    #controls input[type="date"],
+    #controls input[type="text"] {
+      background: var(--bg);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 3px 8px;
+      font-size: 12px;
+      font-family: var(--font-mono);
+    }
+
+    #controls input[type="date"]:focus,
+    #controls input[type="text"]:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(79, 158, 255, 0.15);
+    }
+
+    #controls input[type="checkbox"],
+    #controls input[type="radio"] {
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    /* ── Main area ── */
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: row;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ── Node panel ── */
+    #node-panel {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 300px;
+      background: rgba(17, 17, 24, 0.97);
+      backdrop-filter: blur(12px);
+      border-right: 1px solid var(--border);
+      transform: translateX(-100%);
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #node-panel.visible {
+      transform: translateX(0);
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px 8px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .panel-type-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      padding: 3px 8px;
+      border-radius: 4px;
+    }
+
+    .panel-type-badge.session {
+      background: #1a2a3a;
+      color: var(--accent);
+    }
+
+    .panel-type-badge.topic {
+      background: #2a1a3a;
+      color: #a78fff;
+    }
+
+    .panel-close {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 16px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      line-height: 1;
+    }
+
+    .panel-close:hover {
+      background: var(--border);
+      color: var(--text-primary);
+    }
+
+    .panel-label {
+      padding: 16px 16px 8px;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.3;
+      word-break: break-word;
+      flex-shrink: 0;
+    }
+
+    .panel-meta {
+      padding: 0 16px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .panel-meta-row {
+      display: flex;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .panel-meta-label {
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      min-width: 60px;
+      flex-shrink: 0;
+    }
+
+    .panel-meta-value {
+      color: var(--text-primary);
+    }
+
+    .panel-relations-header {
+      padding: 12px 16px 6px;
+      font-size: 10px;
+      font-family: var(--font-mono);
+      letter-spacing: 0.1em;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
+    .panel-relations {
+      padding: 0 16px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .panel-relation-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+
+    .panel-relation-item:hover {
+      background: var(--surface-2);
+      border-color: var(--border);
+    }
+
+    .panel-relation-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .panel-relation-dot.session {
+      background: var(--accent);
+    }
+
+    .panel-relation-dot.topic {
+      border-radius: 2px;
+      background: #a78fff;
+    }
+
+    .panel-relation-label {
+      font-size: 12px;
+      color: #c8c8d8;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .panel-relation-type {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      color: #666680;
+      flex-shrink: 0;
+    }
+
+    /* ── Graph container ── */
+    #graph {
+      flex: 1;
+      overflow: hidden;
+    }
   </style>
 </head>
 <body>
-  <div id="controls"></div>
-  <div id="graph"></div>
+  <div id="controls">
+    <span id="app-title">cc-timeline</span>
+    <div class="controls-divider"></div>
+  </div>
+  <div id="main">
+    <div id="node-panel">
+      <div class="panel-header">
+        <span class="panel-type-badge" id="panel-type-badge">SESSION</span>
+        <button class="panel-close" id="panel-close" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="panel-label" id="panel-label">Node Label</div>
+      <div class="panel-meta" id="panel-meta"></div>
+      <div class="panel-relations-header">Connected to</div>
+      <div class="panel-relations" id="panel-relations"></div>
+    </div>
+    <div id="graph"></div>
+  </div>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

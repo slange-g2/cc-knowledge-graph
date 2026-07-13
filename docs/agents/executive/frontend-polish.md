@@ -11,7 +11,11 @@ Three deliverables:
 3. **Node detail sheet** — left panel that slides in on node click, showing full node metadata + connected nodes
 
 ## State of the work
-PENDING — agent hasn't started.
+DONE — implemented by Frontend Worker on 2026-07-13.
+
+- **index.html**: Full rewrite. CSS variables (--bg, --surface-1, --surface-2, --border, --text-primary, --text-secondary, --accent, --font-main, --font-mono). Layout changed to #controls (56px) + #main (flex row, position:relative) containing #node-panel (absolute, slide-in panel) + #graph (flex:1). Controls bar styled with dark-tech aesthetic, app title "cc-timeline" in monospace accent color, dividers, section labels. Full node panel HTML (panel-header, type badge, close button, label, meta, relations-header, relations) with all CSS per spec. Panel hidden by default (translateX(-100%)), visible class slides it in with 0.25s cubic-bezier transition.
+- **graph.ts**: Signature updated to accept `onNodeSelect` callback. `currentData` stored at initGraph closure scope, updated at start of update(). All rendered groups wrapped in `mainG = svg.append('g')`. d3.zoom applied to svg (scaleExtent [0.15,5]), dblclick on bgRect resets to zoomIdentity. Edges get `pointer-events:none`. Edge stroke colors: session-topic #2a4a7a (0.5 opacity), topic-similarity #4a2a7a (0.4 opacity). d3.drag added on node groups. Column guides: stroke #2a2a38, stroke-dasharray 3,4. Column labels: fill #555570, font-family JetBrains Mono, font-size 10px. Node click resolves fullNode + related from currentData and calls onNodeSelect. Background click calls onNodeSelect(null, []) + resetHighlight. Nodes get subtle white stroke (0.5 opacity 0.15). Highlight/reset properly manages stroke-opacity and stroke-width.
+- **main.ts**: Imports GraphNode. Panel DOM elements grabbed. formatDate, showPanel, hidePanel implemented. initGraph call updated to pass onNodeSelect callback. panelClose wired to hidePanel.
 
 ## Decisions in force
 - Stack: plain TypeScript + D3 v7 + Vite. **No React, no Tailwind, no new npm packages.**
