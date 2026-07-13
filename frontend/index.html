@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CC Timeline</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: sans-serif; background: #111; color: #eee; display: flex; flex-direction: column; height: 100vh; }
+    #controls {
+      height: 60px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 16px;
+      background: #1a1a1a;
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+      overflow: hidden;
+    }
+    #controls label { font-size: 13px; display: flex; align-items: center; gap: 4px; }
+    #controls input[type="date"], #controls input[type="text"] {
+      background: #222; color: #eee; border: 1px solid #444; border-radius: 4px; padding: 2px 6px; font-size: 13px;
+    }
+    #controls .section { display: flex; align-items: center; gap: 8px; }
+    #controls .section-label { font-size: 12px; color: #888; margin-right: 4px; }
+    #graph { height: calc(100vh - 60px); width: 100%; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <div id="controls"></div>
+  <div id="graph"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
